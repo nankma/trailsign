@@ -9,10 +9,10 @@ Trailsign is a small, language-independent library for resolving
 application settings from a declarative, self-describing config, where
 each value declares its own source (a literal, an environment variable,
 a vault secret, ...) instead of the caller assuming where to look.
-**Design-only as of 2026-09-01** — `settings.py` is a draft Python
-reference implementation: no tests, no package structure, not
-published. Turning this into a real, general-purpose library is the
-open work.
+**Python package built out as of 2026-09-01** — `src/trailsign/` is a
+real installable package (`pyproject.toml`, src layout) with a test
+suite (`tests/`). Not yet published to a package index. A port to a
+second language is the remaining open work (see "Immediate next work").
 
 Extracted from a Telegram news-trend bot (Auguring, formerly Argus)
 where this design started — see `docs/design.md`'s own "Origin" section
@@ -32,23 +32,30 @@ for why it moved here instead of staying bot-specific.
   factory, never this library's job — see `docs/design.md`'s "Two jobs,
   two owners" section. Don't add object-construction here even if it
   seems convenient for a first real consumer.
-- `_oci_config_from()` in `settings.py` is a stub
+- `_oci_config_from()` in `src/trailsign/settings.py` is a stub
   (`raise NotImplementedError`) — the OCI auth shape (config file vs.
   instance principal vs. explicit key) isn't decided yet.
+- **`OracleKeyVaultResolver.resolve()` validates the node's own fields
+  (`source`, `secret_ocid`) *before* `import oci`.** This was a real bug
+  found while writing tests: `import oci` used to run first, so a
+  missing `secret_ocid` raised `ModuleNotFoundError` instead of
+  `SettingsError` whenever the `oci` package wasn't installed — breaking
+  the "no oci dependency needed unless actually used" guarantee for the
+  validation-error paths, not just the happy path. Keep the import after
+  field validation if this method is touched again.
 
 ## Where to look
 
 | Need | Where |
 |---|---|
 | Full design: data flow, diagrams, resolved/still-open questions | `docs/design.md` |
-| Python reference implementation | `settings.py` |
+| Python reference implementation | `src/trailsign/settings.py` |
+| Test suite | `tests/` (`conftest.py` has the shared fixture config) |
 | Project status, what's built vs. not | `README.md` |
 | How to write/extend design docs like `docs/design.md` | the `writing-system-design-docs` skill (global, not repo-local) |
 
 ## Immediate next work
 
 Not built yet, in rough order:
-1. Real package structure (`pyproject.toml`, proper layout — `settings.py` is one flat file today)
-2. A test suite (none exists yet)
-3. Resolve `docs/design.md`'s "Still open" items as they come up in practice, not speculatively
-4. Consider a port to a second language once the Python implementation is solid, since the whole design's point is being language-independent, not just Python
+1. Resolve `docs/design.md`'s "Still open" items as they come up in practice, not speculatively (the OCI auth shape in particular — `_oci_config_from()` is still a stub)
+2. Consider a port to a second language now that the Python package is solid, since the whole design's point is being language-independent, not just Python

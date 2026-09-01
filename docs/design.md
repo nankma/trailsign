@@ -9,7 +9,7 @@ language** — the config shape, the resolve/dispatch logic, and the class
 relationships below hold equally whether this gets built in Python, Go,
 or Rust: an "interface" here is a Go `interface`, a Rust `trait`, or a
 Python `typing.Protocol` depending who's building it — same contract
-either way. [`settings.py`](../settings.py) is one reference
+either way. [`settings.py`](../src/trailsign/settings.py) is one reference
 implementation (Python), linked wherever the prose below has a concrete
 counterpart in it, but nothing in this doc should require reading that
 file to be understood.
@@ -146,7 +146,7 @@ surviving anywhere inside it; that shape is consumed during resolution,
 never handed onward. A consumer's own factory (a plain name→constructor
 map) looks up its discriminator field in that map and builds the
 instance from the already-resolved values. See
-[`settings.py`](../settings.py)'s `Settings.resolved()` for the Python
+[`settings.py`](../src/trailsign/settings.py)'s `Settings.resolved()` for the Python
 reference implementation of the resolve step.
 
 ### Resolvers are pluggable — one interface, one implementation per source type
@@ -176,15 +176,15 @@ design that touches a cloud vendor's SDK, and that dependency should be
 loaded lazily (only when a value of that type is actually resolved, not
 at program start) — a consumer with no Oracle dependency never needs
 that SDK present at all, in any language. See
-[`settings.py`](../settings.py)'s `OracleKeyVaultResolver` for how the
+[`settings.py`](../src/trailsign/settings.py)'s `OracleKeyVaultResolver` for how the
 Python reference implementation does this (a local `import oci` inside
 the method body, not a module-level import).
 
 ## How the data actually flows: config → resolved value → consumer
 
-Code: [`settings.py`](../settings.py). Draft — a reference
-implementation, no tests yet. What follows describes what that code
-does, without reading the code itself.
+Code: [`settings.py`](../src/trailsign/settings.py) — a reference
+implementation, packaged and tested (see `../tests/`). What follows
+describes what that code does, without reading the code itself.
 
 ### Fixing an ambiguity: a bare `resolve` word wasn't enough either
 
@@ -386,12 +386,10 @@ per-user/per-session data is out of scope entirely).
   opt-in eager path a consumer's entry point is meant to call up front.
   Still needs confirming that's actually the right default, not just a
   plausible draft.
-- **Package structure** — `settings.py` is one flat file today, not a
-  real installable package (no `pyproject.toml`, no tests, no version).
-  Turning this into an actual publishable library — proper package
-  layout, a test suite, and likely a port to at least one other language
-  given the whole point of this design is being language-independent —
-  is the next real chunk of work.
+- **A port to a second language** — the Python package (`pyproject.toml`,
+  src layout, test suite) is built out; a port to at least one other
+  language is still open, given the whole point of this design is being
+  language-independent, not just Python.
 - **`credential_sources`' auth-config shape** — `_oci_config_from()` in
   `settings.py` is a placeholder; the exact OCI auth shape (config file
   vs. instance principal vs. explicit key) isn't pinned down, and the

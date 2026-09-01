@@ -19,12 +19,15 @@ no trace of where it came from left in the shape.
 
 ## Status
 
-**Design-only, as of 2026-09-01.** `settings.py` is a draft Python
-reference implementation — not tested, not packaged, not published. This
-is meant to be picked up by a dedicated work session next, to turn it
-into a real general-purpose library: a proper package layout, a test
-suite, and likely a port to at least one other language, since the
-design's whole point is being language-independent, not just Python.
+**Python package built out, as of 2026-09-01.** `src/trailsign/` is a
+real installable package (`pyproject.toml`, src layout) with a test
+suite covering the resolve walk, the three built-in resolvers,
+`validate()`'s combined-error behavior, and the `trailsign-resolve` vs.
+`type` non-collision regression. Not yet published to a package index.
+A port to at least one other language is still open, since the design's
+whole point is being language-independent, not just Python.
+
+Install for development: `pip install -e ".[test]"`, then `pytest`.
 
 ## Start here
 
@@ -33,10 +36,12 @@ design's whole point is being language-independent, not just Python.
   `interface`, a Rust `trait`, or a Python `typing.Protocol`), why it's
   shaped this way, two worked examples with diagrams, and what's still
   undecided.
-- [`settings.py`](settings.py) — the Python reference implementation,
-  matching `docs/design.md` exactly.
-- [`.claude/skills/writing-system-design-docs/`](.claude/skills/writing-system-design-docs/SKILL.md)
-  — the doc-writing convention `docs/design.md` follows, carried over
+- [`src/trailsign/settings.py`](src/trailsign/settings.py) — the Python
+  reference implementation, matching `docs/design.md` exactly.
+- [`tests/`](tests/) — the test suite; `tests/conftest.py` has a shared
+  fixture config mirroring `docs/design.md`'s worked examples.
+- the `writing-system-design-docs` skill (global, not repo-local) — the
+  doc-writing convention `docs/design.md` follows, carried over
   from where this project started in case future design docs here want
   the same discipline (language-independent contracts, diagrams, a
   "still open" section that's actually kept honest).
@@ -70,10 +75,8 @@ credential from a vault) with diagrams, is in `docs/design.md`.
 
 ## What's not decided yet
 
-See `docs/design.md`'s own "Still open" section — carried over from
-where this design started, still accurate as of 2026-09-01:
+See `docs/design.md`'s own "Still open" section for full detail:
 
-- Package structure (this is one flat file today, not an installable
-  library)
 - Exact auth-config shape for vault-backed resolvers
 - Validation-timing default (eager vs. lazy)
+- A port to a second language

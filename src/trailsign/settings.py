@@ -11,10 +11,10 @@ design (data flow, diagrams, and why `trailsign-resolve:` has to be a
 dedicated key rather than reusing a subsystem's own `type:`-style
 discriminator).
 
-Draft: a reference implementation in Python. No tests yet, not
-packaged, not published. Extracted 2026-09-01 from a Telegram
-news-trend bot's settings work -- the design turned out to be genuinely
-content-independent, so it lives here as its own project now.
+A reference implementation in Python, packaged and tested. Extracted
+2026-09-01 from a Telegram news-trend bot's settings work -- the design
+turned out to be genuinely content-independent, so it lives here as its
+own project now.
 """
 
 from __future__ import annotations
@@ -70,12 +70,13 @@ class OracleKeyVaultResolver:
     the `oci` package installed at all."""
 
     def resolve(self, node: dict[str, Any], settings: "Settings") -> Any:
-        import oci  # local import -- see class docstring
-
         source = settings.get_credential_source(node["source"])
         secret_ocid = node.get("secret_ocid")
         if not secret_ocid:
             raise SettingsError("oracleKeyVault value missing its 'secret_ocid' field")
+
+        import oci  # local import -- see class docstring
+
         client = oci.secrets.SecretsClient(_oci_config_from(source))
         response = client.get_secret_bundle(secret_ocid)
         return response.data.secret_bundle_content.content  # base64; decode as needed
