@@ -11,7 +11,7 @@ from trailsign import (
     Settings,
     SettingsError,
 )
-from trailsign.settings import _oci_config_from
+from trailsign.settings import _oci_secrets_client
 
 
 def test_plaintext_resolver_returns_value_field():
@@ -65,26 +65,46 @@ def test_oracle_key_vault_resolver_unknown_source_raises(settings):
         resolver.resolve(node, settings)
 
 
-def test_oci_config_from_is_still_a_stub():
-    with pytest.raises(NotImplementedError):
-        _oci_config_from({"type": "oracleKeyVault"})
-
-
-def test_oracle_key_vault_resolver_happy_path_with_mocked_oci(settings, monkeypatch):
-    """`import oci` happens lazily inside resolve() -- inject a fake module
-    into sys.modules rather than requiring the real oci SDK to be
-    installed. `_oci_config_from` is stubbed for now (see docs/design.md's
-    'Still open' section), so it's patched here to isolate this test from
-    that undecided auth shape."""
+def _install_fake_oci(monkeypatch, secret_bundle_b64: str) -> MagicMock:
+    """Injects a fake `oci` module into sys.modules -- `import oci` happens
+    lazily inside `_oci_secrets_client()`, so this isolates the test from
+    needing the real SDK (or a real OCI instance-metadata service, which
+    `InstancePrincipalsSecurityTokenSigner()` would otherwise require)."""
     fake_secret_bundle = MagicMock()
-    fake_secret_bundle.data.secret_bundle_content.content = "ZmFrZS1zZWNyZXQ="
+    fake_secret_bundle.data.secret_bundle_content.content = secret_bundle_b64
 
-    fake_secrets_client_cls = MagicMock(return_value=MagicMock(get_secret_bundle=MagicMock(return_value=fake_secret_bundle)))
+    fake_secrets_client_cls = MagicMock(
+        return_value=MagicMock(get_secret_bundle=MagicMock(return_value=fake_secret_bundle))
+    )
+    fake_signer_cls = MagicMock()
 
     fake_oci = types.ModuleType("oci")
     fake_oci.secrets = types.SimpleNamespace(SecretsClient=fake_secrets_client_cls)
+    fake_oci.auth = types.SimpleNamespace(
+        signers=types.SimpleNamespace(InstancePrincipalsSecurityTokenSigner=fake_signer_cls)
+    )
     monkeypatch.setitem(sys.modules, "oci", fake_oci)
-    monkeypatch.setattr("trailsign.settings._oci_config_from", lambda source: {})
+    return fake_secrets_client_cls
+
+
+def test_oci_secrets_client_uses_instance_principal_auth(monkeypatch):
+    """Regression test for the real auth-shape bug found while verifying
+    against a live OCI Vault secret: the SDK call must be
+    `SecretsClient(config={}, signer=<InstancePrincipalsSecurityTokenSigner
+    instance>)`, not a populated config dict with no signer -- that's the
+    shape this project's real deployed secret fetches actually use."""
+    fake_secrets_client_cls = _install_fake_oci(monkeypatch, "ZmFrZS1zZWNyZXQ=")
+    _oci_secrets_client()
+    _, kwargs = fake_secrets_client_cls.call_args
+    assert kwargs["config"] == {}
+    assert kwargs["signer"] is not None
+
+
+def test_oracle_key_vault_resolver_happy_path_with_mocked_oci(settings, monkeypatch):
+    """"ZmFrZS1zZWNyZXQ=" is "fake-secret" base64-encoded -- the resolver is
+    expected to hand back the decoded plain string, same contract as
+    every other resolver, not the base64 wire format."""
+    fake_secrets_client_cls = _install_fake_oci(monkeypatch, "ZmFrZS1zZWNyZXQ=")
 
     resolver = OracleKeyVaultResolver()
     node = {
@@ -93,5 +113,5 @@ def test_oracle_key_vault_resolver_happy_path_with_mocked_oci(settings, monkeypa
         "secret_ocid": "ocid1.vaultsecret.oc1....",
     }
     result = resolver.resolve(node, settings)
-    assert result == "ZmFrZS1zZWNyZXQ="
+    assert result == "fake-secret"
     fake_secrets_client_cls.return_value.get_secret_bundle.assert_called_once_with("ocid1.vaultsecret.oc1....")

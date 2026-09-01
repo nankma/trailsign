@@ -103,6 +103,20 @@ again. Adding a second credential-source type (e.g. AWS Secrets Manager)
 is just another named block under `credential_sources:` plus a new
 Resolver implementation, not a redesign.
 
+**Correction, verified 2026-09-01 against a live OCI Vault secret**:
+under instance-principal auth (the only auth shape this design actually
+implements — see "Resolved questions" below), `region`/`vault_ocid`/
+`compartment_ocid` are *not* load-bearing for `OracleKeyVaultResolver` —
+`get_secret_bundle(secret_ocid)` needs only the secret's own OCID plus
+an authenticated client, nothing from `credential_sources` itself. The
+`source:` reference is still real (it's validated to exist, and is
+where a future auth shape needing that connection info would read it
+from), but today those fields are effectively documentation for humans,
+not consumed by the resolve step. Left in the example above since a
+`source:` block naming *some* vault is still how a reader knows which
+vault a secret lives in, and a future non-instance-principal resolver
+variant may need them for real.
+
 ### Two jobs, two owners — this is the load-bearing decision
 
 1. **Resolving a marked value to a plain string** — `Settings`' job, and
@@ -169,7 +183,7 @@ that's a dedicated, namespaced key rather than a bare word like
 |---|---|
 | `plaintext` | Reading the node's own `value` field directly — no lookup at all |
 | `environment-variable` | Reading the node's `name` field, then reading that name from the process environment |
-| `oracleKeyVault` | Reading the node's `source` field, looking that name up in the top-level `credential_sources` block for connection info, then fetching the node's own `secret_ocid` from OCI's Secrets service using that connection |
+| `oracleKeyVault` | Validating the node's `source` field names a real entry in the top-level `credential_sources` block, then fetching the node's own `secret_ocid` from OCI's Secrets service via instance-principal auth and base64-decoding the result to a plain string |
 
 `oracleKeyVault`'s implementation should be the **only** place in this
 design that touches a cloud vendor's SDK, and that dependency should be
@@ -262,11 +276,13 @@ telemetry:
    part of the output dict as-is (it's the consumer's own discriminator,
    see step 5).
 3. `api-key` **has** a `trailsign-resolve:` key (`oracleKeyVault`) →
-   `OracleKeyVaultResolver.resolve(...)` runs. It looks up the named
-   connection block via `settings.get_credential_source("oci-vault-main")`
-   (the reusable block under top-level `credential_sources:`), then calls
-   the OCI Secrets SDK with that connection info plus this node's own
-   `secret_ocid` to fetch the real key.
+   `OracleKeyVaultResolver.resolve(...)` runs. It validates that
+   `settings.get_credential_source("oci-vault-main")` names a real entry
+   under top-level `credential_sources:`, then authenticates via
+   instance-principal auth and calls the OCI Secrets SDK with this
+   node's own `secret_ocid` to fetch and base64-decode the real key —
+   the connection block's own fields aren't used by this auth shape (see
+   the correction note under "The converged design" above).
 4. Output: `{"type": "logfire", "api-key": "<the real key>"}`.
 5. The consumer's own factory reads `cfg["type"]` (`"logfire"`) and
    constructs whatever backend implementation is registered under that
@@ -337,8 +353,8 @@ flowchart TD
 
     RAW -->|"resolve subtree\n'telemetry.events'"| WALK2["walk the telemetry.events subtree"]
     WALK2 -->|"type=logfire:\nno 'trailsign-resolve' key, kept as-is"| RESOLVED2
-    WALK2 -->|"api-key: has 'trailsign-resolve: oracleKeyVault'"| CRED["look up named connection\n'oci-vault-main'"]
-    CRED --> VAULT["fetch secret from OCI Vault"]
+    WALK2 -->|"api-key: has 'trailsign-resolve: oracleKeyVault'"| CRED["validate named connection\n'oci-vault-main' exists"]
+    CRED --> VAULT["instance-principal auth,\nfetch + base64-decode secret"]
     VAULT --> RESOLVED2["resolved map\n(api-key = real string)"]
     RESOLVED2 -->|"read 'type' field"| FACTORY2["consumer's own factory"]
     FACTORY2 --> INSTANCE2["telemetry backend instance"]
@@ -346,11 +362,9 @@ flowchart TD
 
 **Not designed yet, deliberately**: type-coercion helpers (`get_int`/
 `get_bool`, likely thin wrappers around `resolved()` — add when a real
-call site needs one); the OCI auth config-building step inside
-`OracleKeyVaultResolver` (depends on which auth shape `credential_sources`
-ends up carrying — see "Still open" below); anything about *writing*
-settings back (this is read-only by design — a consumer's own runtime
-per-user/per-session data is out of scope entirely).
+call site needs one); anything about *writing* settings back (this is
+read-only by design — a consumer's own runtime per-user/per-session
+data is out of scope entirely).
 
 ## Resolved questions
 
@@ -372,6 +386,21 @@ per-user/per-session data is out of scope entirely).
    rounds of collision (see "Fixing an ambiguity" above) before landing
    on `trailsign-resolve:`, which is unlikely enough as a real-world
    field name to treat as effectively collision-free.
+6. **`credential_sources`' OCI auth-config shape** — resolved 2026-09-01:
+   instance-principal auth
+   (`oci.auth.signers.InstancePrincipalsSecurityTokenSigner`), matching
+   the same auth shape every other secret fetch in the originating bot's
+   own production deployment already uses (`oci secrets secret-bundle
+   get --auth instance_principal`) — no static config file or explicit
+   key, and it only works from inside an OCI compute instance. Verified
+   end to end against a real vault secret via
+   `tools/verify_oracle_vault.py` (requires an IAM policy granting the
+   calling instance's dynamic group `read secret-bundles` — a real,
+   one-time gap hit during that verification, not a code issue). As a
+   consequence, `credential_sources`' `region`/`vault_ocid`/
+   `compartment_ocid` fields turned out not to be load-bearing for this
+   resolver (see the correction note under "The converged design" above)
+   — only `secret_ocid` and an authenticated client are actually used.
 
 ## Still open
 
@@ -390,11 +419,13 @@ per-user/per-session data is out of scope entirely).
   src layout, test suite) is built out; a port to at least one other
   language is still open, given the whole point of this design is being
   language-independent, not just Python.
-- **`credential_sources`' auth-config shape** — `_oci_config_from()` in
-  `settings.py` is a placeholder; the exact OCI auth shape (config file
-  vs. instance principal vs. explicit key) isn't pinned down, and the
-  same question will come up again for every other vault-style resolver
-  added later.
+- **A non-instance-principal OCI auth shape** — instance-principal is the
+  only auth shape implemented (see "Resolved questions" above); a
+  consumer running `oracleKeyVault` outside an OCI compute instance
+  (local dev, CI) isn't supported yet. Same question will come up again
+  for every other vault-style resolver added later (AWS Secrets Manager,
+  Azure Key Vault, ...) — each will need its own real auth shape pinned
+  down against that vendor's actual production usage, not guessed.
 - **How a consuming project should sequence its own migration onto
   this** — not a Trailsign design question exactly, but worth a note in
   this library's own docs eventually: migrate one subsystem at a time,

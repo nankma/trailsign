@@ -5,3 +5,9 @@ __pycache__/
 .venv/
 build/
 dist/
+
+# Local-only infrastructure notes (real IPs, SSH key paths, live OCIDs) --
+# must NEVER be committed. See tools/verify_oracle_vault.py, which reads
+# only from CLI args/env, never from this file directly, and stays
+# secret-free so it's safe to commit.
+local-infra/

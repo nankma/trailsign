@@ -19,6 +19,7 @@ own project now.
 
 from __future__ import annotations
 
+import base64
 import os
 from pathlib import Path
 from typing import Any, Protocol
@@ -70,23 +71,39 @@ class OracleKeyVaultResolver:
     the `oci` package installed at all."""
 
     def resolve(self, node: dict[str, Any], settings: "Settings") -> Any:
-        source = settings.get_credential_source(node["source"])
+        settings.get_credential_source(node["source"])  # validates 'source' exists
         secret_ocid = node.get("secret_ocid")
         if not secret_ocid:
             raise SettingsError("oracleKeyVault value missing its 'secret_ocid' field")
 
-        import oci  # local import -- see class docstring
-
-        client = oci.secrets.SecretsClient(_oci_config_from(source))
+        client = _oci_secrets_client()
         response = client.get_secret_bundle(secret_ocid)
-        return response.data.secret_bundle_content.content  # base64; decode as needed
+        content = response.data.secret_bundle_content.content  # base64-encoded
+        return base64.b64decode(content).decode("utf-8")
 
 
-def _oci_config_from(source: dict[str, Any]) -> dict[str, Any]:
-    """Placeholder -- exact OCI auth shape (config file vs. instance
-    principal vs. explicit key) not pinned down yet; see docs/design.md's
-    'Still open' section."""
-    raise NotImplementedError
+def _oci_secrets_client() -> Any:
+    """Builds an authenticated OCI SecretsClient using instance-principal
+    auth -- confirmed against a real production config (a sibling
+    project's local-infra/infrastructure.yaml) as the only auth shape
+    actually in use: every deployed secret fetch there runs `oci secrets
+    secret-bundle get --auth instance_principal`, no static credential,
+    from inside an OCI compute instance. `config={}` alongside a signer
+    is the correct SDK shape for this, not a placeholder for a real
+    config -- there deliberately isn't one. Calling this off an OCI
+    instance fails with an instance-metadata-service error, which is
+    expected, not a bug in this function.
+
+    A `credential_sources` entry's own `vault_ocid`/`compartment_ocid`
+    aren't used here: get_secret_bundle(secret_ocid) needs neither under
+    instance-principal auth (verified against a real vault secret via
+    tools/verify_oracle_vault.py) -- see docs/design.md's 'Still open'
+    section for whether they end up load-bearing for some other
+    OCI operation later."""
+    import oci  # local import -- see class docstring
+
+    signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
+    return oci.secrets.SecretsClient(config={}, signer=signer)
 
 
 def default_resolvers() -> dict[str, SettingsResolver]:

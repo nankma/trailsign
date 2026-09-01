@@ -32,9 +32,18 @@ for why it moved here instead of staying bot-specific.
   factory, never this library's job — see `docs/design.md`'s "Two jobs,
   two owners" section. Don't add object-construction here even if it
   seems convenient for a first real consumer.
-- `_oci_config_from()` in `src/trailsign/settings.py` is a stub
-  (`raise NotImplementedError`) — the OCI auth shape (config file vs.
-  instance principal vs. explicit key) isn't decided yet.
+- **`OracleKeyVaultResolver` uses instance-principal auth
+  (`_oci_secrets_client()` in `src/trailsign/settings.py`) — not a
+  static config file, not an explicit key.** Verified 2026-09-01 against
+  a real OCI Vault secret from a compute instance (see
+  `tools/verify_oracle_vault.py`); only works from inside an OCI compute
+  instance (requires a dynamic-group IAM policy granting `read
+  secret-bundles` — a real gap hit during that verification, not a code
+  bug). `credential_sources`' `region`/`vault_ocid`/`compartment_ocid`
+  fields are validated to exist via `source:` but are **not** actually
+  consumed by this auth shape — don't assume they're load-bearing if
+  refactoring this resolver; see `docs/design.md`'s correction note
+  under "The converged design".
 - **`OracleKeyVaultResolver.resolve()` validates the node's own fields
   (`source`, `secret_ocid`) *before* `import oci`.** This was a real bug
   found while writing tests: `import oci` used to run first, so a
@@ -43,6 +52,12 @@ for why it moved here instead of staying bot-specific.
   the "no oci dependency needed unless actually used" guarantee for the
   validation-error paths, not just the happy path. Keep the import after
   field validation if this method is touched again.
+- **Secret hygiene**: never commit real infrastructure values (VM IPs,
+  SSH key paths, live OCIDs). `local-infra/infrastructure.yaml` holds
+  them and is gitignored; `tools/verify_oracle_vault.py` takes everything
+  sensitive via CLI arg only and stays secret-free so it's safe to
+  commit. Before this repo ever goes from private to public, run the
+  global `audit-before-going-public` skill first.
 
 ## Where to look
 
@@ -57,5 +72,5 @@ for why it moved here instead of staying bot-specific.
 ## Immediate next work
 
 Not built yet, in rough order:
-1. Resolve `docs/design.md`'s "Still open" items as they come up in practice, not speculatively (the OCI auth shape in particular — `_oci_config_from()` is still a stub)
+1. Resolve `docs/design.md`'s remaining "Still open" items as they come up in practice, not speculatively (a non-instance-principal OCI auth shape, for consumers running outside an OCI compute instance, is the main one left)
 2. Consider a port to a second language now that the Python package is solid, since the whole design's point is being language-independent, not just Python
