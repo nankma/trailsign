@@ -9,14 +9,15 @@ Trailsign is a small, language-independent library for resolving
 application settings from a declarative, self-describing config, where
 each value declares its own source (a literal, an environment variable,
 a vault secret, ...) instead of the caller assuming where to look.
-**Python package built out as of 2026-09-01** — `src/trailsign/` is a
-real installable package (`pyproject.toml`, src layout) with a test
-suite (`tests/`). MIT licensed, public on GitHub
-(https://github.com/nankma/trailsign), CI (`.github/workflows/test.yml`)
-runs on push/PR, `main` requires a passing PR before merge. A
-`.github/workflows/publish.yml` exists for PyPI Trusted Publishing but
-the project hasn't been published there yet — see "Immediate next
-work". A port to a second language is the other remaining open work.
+**Published on PyPI as of 2026-09-01 (v0.1.0)** — `pip install
+trailsign` works. `src/trailsign/` is a real installable package
+(`pyproject.toml`, src layout) with a test suite (`tests/`). MIT
+licensed, public on GitHub (https://github.com/nankma/trailsign), CI
+(`.github/workflows/test.yml`) runs on push/PR, `main` requires a
+passing PR before merge. Cutting a new GitHub Release triggers
+`.github/workflows/publish.yml` to auto-publish to PyPI (Trusted
+Publishing, no stored token) — bump `version` in `pyproject.toml` first.
+A port to a second language is the main remaining open work.
 
 Extracted from a Telegram news-trend bot (Auguring, formerly Argus)
 where this design started — see `docs/design.md`'s own "Origin" section
@@ -76,6 +77,5 @@ for why it moved here instead of staying bot-specific.
 ## Immediate next work
 
 Not built yet, in rough order:
-1. First PyPI publish: register the pending Trusted Publisher on pypi.org (Owner `nankma`, repo `trailsign`, workflow `publish.yml`, environment `pypi` — see `.github/workflows/publish.yml`), then cut a GitHub Release to trigger it
-2. Resolve `docs/design.md`'s remaining "Still open" items as they come up in practice, not speculatively (a non-instance-principal OCI auth shape, for consumers running outside an OCI compute instance, is the main one left)
-3. Consider a port to a second language now that the Python package is solid, since the whole design's point is being language-independent, not just Python
+1. Resolve `docs/design.md`'s remaining "Still open" items as they come up in practice, not speculatively (a non-instance-principal OCI auth shape, for consumers running outside an OCI compute instance, is the main one left)
+2. Consider a port to a second language now that the Python package is solid, since the whole design's point is being language-independent, not just Python

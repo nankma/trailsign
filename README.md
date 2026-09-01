@@ -19,24 +19,22 @@ no trace of where it came from left in the shape.
 
 ## Status
 
-**Python package built out, as of 2026-09-01.** `src/trailsign/` is a
+**Published on PyPI as of 2026-09-01 (v0.1.0).** `src/trailsign/` is a
 real installable package (`pyproject.toml`, src layout) with a test
 suite covering the resolve walk, the three built-in resolvers
 (`OracleKeyVaultResolver` verified against a real OCI Vault secret —
 see `tools/verify_oracle_vault.py`), `validate()`'s combined-error
 behavior, and the `trailsign-resolve` vs. `type` non-collision
 regression. MIT licensed (see `LICENSE`). Public on GitHub; CI runs the
-test suite on every push/PR. Not yet published to PyPI. A port to at
-least one other language is still open, since the design's whole point
-is being language-independent, not just Python.
+test suite on every push/PR, and a GitHub Release triggers an automatic
+PyPI publish (Trusted Publishing, no stored token). A port to at least
+one other language is still open, since the design's whole point is
+being language-independent, not just Python.
 
 ### Installing it
 
-Not on PyPI yet — until then, install straight from GitHub, ideally
-pinned to a tag once one exists:
-
 ```
-pip install git+https://github.com/nankma/trailsign.git@main
+pip install trailsign
 ```
 
 Install for development on this repo: `pip install -e ".[test]"`, then
