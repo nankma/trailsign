@@ -21,13 +21,26 @@ no trace of where it came from left in the shape.
 
 **Python package built out, as of 2026-09-01.** `src/trailsign/` is a
 real installable package (`pyproject.toml`, src layout) with a test
-suite covering the resolve walk, the three built-in resolvers,
-`validate()`'s combined-error behavior, and the `trailsign-resolve` vs.
-`type` non-collision regression. Not yet published to a package index.
-A port to at least one other language is still open, since the design's
-whole point is being language-independent, not just Python.
+suite covering the resolve walk, the three built-in resolvers
+(`OracleKeyVaultResolver` verified against a real OCI Vault secret —
+see `tools/verify_oracle_vault.py`), `validate()`'s combined-error
+behavior, and the `trailsign-resolve` vs. `type` non-collision
+regression. MIT licensed (see `LICENSE`). Public on GitHub; CI runs the
+test suite on every push/PR. Not yet published to PyPI. A port to at
+least one other language is still open, since the design's whole point
+is being language-independent, not just Python.
 
-Install for development: `pip install -e ".[test]"`, then `pytest`.
+### Installing it
+
+Not on PyPI yet — until then, install straight from GitHub, ideally
+pinned to a tag once one exists:
+
+```
+pip install git+https://github.com/nankma/trailsign.git@main
+```
+
+Install for development on this repo: `pip install -e ".[test]"`, then
+`pytest`.
 
 ## Start here
 
@@ -77,6 +90,7 @@ credential from a vault) with diagrams, is in `docs/design.md`.
 
 See `docs/design.md`'s own "Still open" section for full detail:
 
-- Exact auth-config shape for vault-backed resolvers
+- A non-instance-principal auth shape for `oracleKeyVault` (today it only
+  works from inside an OCI compute instance)
 - Validation-timing default (eager vs. lazy)
 - A port to a second language
