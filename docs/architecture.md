@@ -1,49 +1,21 @@
-# Trailsign: design
-
-**Status: design converged 2026-08-31, extracted into its own project
-2026-09-01.** Living document — edited in place as decisions land, not
-re-created.
+# Trailsign: architecture
 
 **This document describes the design independent of any implementation
 language** — the config shape, the resolve/dispatch logic, and the class
 relationships below hold equally whether this gets built in Python, Go,
 or Rust: an "interface" here is a Go `interface`, a Rust `trait`, or a
 Python `typing.Protocol` depending who's building it — same contract
-either way. [`settings.py`](../src/trailsign/settings.py) is one reference
-implementation (Python), linked wherever the prose below has a concrete
+either way. [`settings.py`](../src/trailsign/settings.py) is the Python
+reference implementation, linked wherever the prose below has a concrete
 counterpart in it, but nothing in this doc should require reading that
 file to be understood.
 
-## Origin: the environment this design was extracted from
+*Design rationale, decision history, and open questions live in a
+private internal repo — this doc covers what a consumer of the library
+needs: the config shape, the resolver reference, and how a value flows
+from config to plain data.*
 
-This design started life inside a Telegram news-trend bot (then named
-Argus, now Auguring) while building a settings abstraction so that bot
-could run standalone as well as on its current cloud deployment. The
-table below — every raw environment-variable read that bot's code had,
-as of 2026-08-31, found by grep — isn't Trailsign's own scope; it's kept
-here because it's *why* the design has the shape it has (nested by
-subsystem, a `trailsign-credential-sources:` block for vault-backed secrets, a
-`plaintext`/`environment-variable`/`oracleKeyVault` resolver set as the
-starting three).
-
-| Variable | Secret? |
-|---|---|
-| `TELEGRAM_BOT_TOKEN`, `ADMIN_BOT_TOKEN` | yes |
-| `ADMIN_CHAT_ID` | no |
-| `DEEPSEEK_API_KEY` | yes |
-| `LLM_MODEL` / `LLM_MODEL_CLASSIFIER` | no |
-| `LOGFIRE_API_KEY` | yes |
-| `NEWSAPI_API_KEY`, `GNEWS_API_KEY`, `PERIGON_API_KEY` | yes |
-| `NEWS_CACHE_DIR`, `MESSAGE_ARCHIVE_DIR`, `SUBSCRIBERS_DB_FILE` | no |
-
-Every one of these was its own raw environment read, in its own file,
-with its own ad hoc default — no single place listed "every setting this
-bot understands." That's the actual problem this design solves, stated
-generically: a project with more than a handful of settings needs one
-place that lists them all, with each one's real source made explicit
-rather than assumed.
-
-## The converged design
+## The config shape
 
 **One config file, nested by subsystem, is the single source of truth.**
 Plain config values (`url`, `model`, `frequency`, `type`) are bare
@@ -89,10 +61,14 @@ news_source:
     queryadoptor: GNewsAdaptor
 ```
 
-Note `trailsign-credential-sources.oci-vault-main.type: oracleKeyVault` above keeps
-plain `type:` — that block is a connection definition, never passed
-through resolution (see "Fixing an ambiguity" below for why that
-distinction has to be structural, not coincidental).
+`trailsign-resolve:` and `trailsign-credential-sources:` are both
+reserved, namespaced keys — deliberately not bare words like `resolve`
+or `credential_sources` — so neither can ever collide with a consuming
+project's own field names. Note that
+`trailsign-credential-sources.oci-vault-main.type: oracleKeyVault` above
+keeps a plain `type:` — that block is a connection definition, never
+passed through resolution; only the presence of the `trailsign-resolve`
+key itself triggers dispatch, never a subsystem's own `type:` field.
 
 **`trailsign-credential-sources:`** holds reusable, named *connection*-level
 definitions (region, vault/compartment id, auth shape) — written once,
@@ -103,21 +79,17 @@ again. Adding a second credential-source type (e.g. AWS Secrets Manager)
 is just another named block under `trailsign-credential-sources:` plus a new
 Resolver implementation, not a redesign.
 
-**Correction, verified 2026-09-01 against a live OCI Vault secret**:
-under instance-principal auth (the only auth shape this design actually
-implements — see "Resolved questions" below), `region`/`vault_ocid`/
+**Note on `oracleKeyVault` today**: under instance-principal auth (the
+only auth shape currently implemented), `region`/`vault_ocid`/
 `compartment_ocid` are *not* load-bearing for `OracleKeyVaultResolver` —
 `get_secret_bundle(secret_ocid)` needs only the secret's own OCID plus
-an authenticated client, nothing from `trailsign-credential-sources` itself. The
-`source:` reference is still real (it's validated to exist, and is
-where a future auth shape needing that connection info would read it
-from), but today those fields are effectively documentation for humans,
-not consumed by the resolve step. Left in the example above since a
-`source:` block naming *some* vault is still how a reader knows which
-vault a secret lives in, and a future non-instance-principal resolver
-variant may need them for real.
+an authenticated client, nothing else from `trailsign-credential-sources`.
+The `source:` reference is still validated to exist, and is where a
+future auth shape needing that connection info would read it from —
+those fields are documentation for humans today, not consumed by the
+resolve step.
 
-### Two jobs, two owners — this is the load-bearing decision
+## Two jobs, two owners — the load-bearing decision
 
 1. **Resolving a marked value to a plain string** — `Settings`' job, and
    *only* Settings' job. Walks the config tree; wherever a node carries
@@ -141,10 +113,7 @@ object construction is subsystem-specific (an `RssAdaptor` and a
 `TelegramTarget` don't share a base class or a constructor shape).
 Folding construction into `Settings` would mean `Settings` importing
 every consumer's own classes — real coupling, and the opposite of what a
-portable settings library should look like. It also keeps "which class
-implements this" grep-able in each consumer's own registry, instead of
-resolved via a generic dynamic-import-by-string mechanism that's harder
-to trace when it points at the wrong thing.
+portable settings library should look like.
 
 **The contract, stated independent of any language**: calling *resolve
 this subtree* on `news_source.gnews` returns a flat map —
@@ -163,21 +132,19 @@ instance from the already-resolved values. See
 [`settings.py`](../src/trailsign/settings.py)'s `Settings.resolved()` for the Python
 reference implementation of the resolve step.
 
-### Resolvers are pluggable — one interface, one implementation per source type
+## Resolvers are pluggable — one interface, one implementation per source type
 
 The **Resolver interface** has exactly one method: *given a typed-value
 node and a way to look up other settings (for cross-references like
 `trailsign-credential-sources`), return the resolved value.* In Python this is a
 `typing.Protocol`; in Go it'd be a one-method `interface`; in Rust a
-`trait` with one required method. Whatever the language, adding a new
-source (AWS Secrets Manager, Azure Key Vault, ...) means writing one new
-implementation of this interface and registering it under a name —
-never a change to the core resolve/dispatch logic itself.
+`trait` with one required method. Adding a new source (AWS Secrets
+Manager, Azure Key Vault, ...) means writing one new implementation of
+this interface and registering it under a name — never a change to the
+core resolve/dispatch logic itself.
 
 v1 ships three implementations, selected via the node's
-`trailsign-resolve:` field (see "Fixing an ambiguity" below for why
-that's a dedicated, namespaced key rather than a bare word like
-`resolve`, let alone a subsystem's own `type:` field):
+`trailsign-resolve:` field:
 
 | `trailsign-resolve:` value | Resolves by |
 |---|---|
@@ -185,60 +152,23 @@ that's a dedicated, namespaced key rather than a bare word like
 | `environment-variable` | Reading the node's `name` field, then reading that name from the process environment |
 | `oracleKeyVault` | Validating the node's `source` field names a real entry in the top-level `trailsign-credential-sources` block, then fetching the node's own `secret_ocid` from OCI's Secrets service via instance-principal auth and base64-decoding the result to a plain string |
 
-`oracleKeyVault`'s implementation should be the **only** place in this
-design that touches a cloud vendor's SDK, and that dependency should be
+`oracleKeyVault`'s implementation is the **only** place in this
+design that touches a cloud vendor's SDK, and that dependency is
 loaded lazily (only when a value of that type is actually resolved, not
 at program start) — a consumer with no Oracle dependency never needs
 that SDK present at all, in any language. See
 [`settings.py`](../src/trailsign/settings.py)'s `OracleKeyVaultResolver` for how the
 Python reference implementation does this (a local `import oci` inside
-the method body, not a module-level import).
+the method body, not a module-level import). It only works from inside
+an OCI compute instance today (instance-principal auth has no static
+credential) — see `tools/verify_oracle_vault.py` for a live-secret
+verification script.
 
 ## How the data actually flows: config → resolved value → consumer
 
 Code: [`settings.py`](../src/trailsign/settings.py) — a reference
 implementation, packaged and tested (see `../tests/`). What follows
 describes what that code does, without reading the code itself.
-
-### Fixing an ambiguity: a bare `resolve` word wasn't enough either
-
-**Two rounds of the same underlying problem, both fixed before this
-became its own project.** Round one: the original design reused a
-subsystem's own `type:` field as the resolver-dispatch signal too —
-`news_source.gnews.type: api` (a subsystem discriminator) collided with
-`api-key.type: environment-variable` (a resolve directive), and broke
-outright on `trailsign-credential-sources.oci-vault-main.type: oracleKeyVault`
-(a connection definition whose `type` happens to equal a real resolver
-name — not a rare coincidence, since a credential source's own type and
-a resolver's name describe the same underlying service by construction).
-Round two: a dedicated `resolve:` key fixed the `type:` collision, but a
-bare English word is still a *generic* one — nothing stops some
-consumer's own schema from legitimately needing a field literally named
-`resolve` for an unrelated reason. **Fix: `trailsign-resolve:`, namespaced
-to this project specifically** — a key this unlikely to ever appear as
-someone else's real field name isn't a coincidence risk at all. Plain
-`type:` (or any other field) stays completely free for consumers to use
-however they want.
-
-`_resolve_node`'s rule is purely structural: a dict is resolvable iff it
-carries the `trailsign-resolve` key — no dependency on what resolvers
-happen to be registered, no dependency on what any other field is named.
-A `trailsign-resolve` value naming an unregistered resolver raises
-`SettingsError` rather than silently passing the node through unresolved
-— once a node declares intent to be resolved, an unrecognized target
-should never resolve to itself unresolved.
-
-**Round three, 2026-09-01: the same reasoning applied to
-`trailsign-credential-sources` itself.** `RESOLVE_KEY` got the
-collision-proofing treatment early; the other structural top-level key
-`Settings.get_credential_source()` reads (originally the bare
-`credential_sources`) didn't, and sat unnoticed as the one remaining
-"unlikely but not impossible" collision — a consumer's own top-level
-config could legitimately have wanted `credential_sources` as its own
-subsystem name, same category of risk `trailsign-resolve` was created to
-close. Renamed to `trailsign-credential-sources` for the same reason,
-before any real consumer had migrated onto v0.1.0's schema — a breaking
-config-shape change, hence the v0.2.0 bump.
 
 ### Walkthrough 1 — a news source's API key (`news_source.gnews`)
 
@@ -294,7 +224,7 @@ telemetry:
    instance-principal auth and calls the OCI Secrets SDK with this
    node's own `secret_ocid` to fetch and base64-decode the real key —
    the connection block's own fields aren't used by this auth shape (see
-   the correction note under "The converged design" above).
+   the note under "The config shape" above).
 4. Output: `{"type": "logfire", "api-key": "<the real key>"}`.
 5. The consumer's own factory reads `cfg["type"]` (`"logfire"`) and
    constructs whatever backend implementation is registered under that
@@ -377,73 +307,3 @@ flowchart TD
 call site needs one); anything about *writing* settings back (this is
 read-only by design — a consumer's own runtime per-user/per-session
 data is out of scope entirely).
-
-## Resolved questions
-
-1. **Precedence** — moot as originally framed. There's no global "env
-   var vs. config file, who wins" — every value declares its own source
-   explicitly, at that value. (An `environment-variable` node still
-   reads from the process environment, same as before — it's just
-   declared, not implicit.)
-2. **Flat vs. nested keys** — nested, by subsystem (`models.guardrail`,
-   `news_source.gnews`, ...), confirmed by the examples above.
-3. **What "KV"/vault support means** — resolved as one Resolver
-   implementation among several, selected per-value by that value's own
-   `trailsign-resolve:` field. The vault SDK only ever gets imported
-   inside that one resolver, only when a value actually asks for it.
-4. **Resolver extensibility** — confirmed pluggable, via the one-method
-   Resolver interface described above (language-agnostic;
-   `settings.py`'s `SettingsResolver` is its Python expression).
-5. **The dispatch key had to be a dedicated, namespaced word** — two
-   rounds of collision (see "Fixing an ambiguity" above) before landing
-   on `trailsign-resolve:`, which is unlikely enough as a real-world
-   field name to treat as effectively collision-free.
-6. **`trailsign-credential-sources`' OCI auth-config shape** — resolved 2026-09-01:
-   instance-principal auth
-   (`oci.auth.signers.InstancePrincipalsSecurityTokenSigner`), matching
-   the same auth shape every other secret fetch in the originating bot's
-   own production deployment already uses (`oci secrets secret-bundle
-   get --auth instance_principal`) — no static config file or explicit
-   key, and it only works from inside an OCI compute instance. Verified
-   end to end against a real vault secret via
-   `tools/verify_oracle_vault.py` (requires an IAM policy granting the
-   calling instance's dynamic group `read secret-bundles` — a real,
-   one-time gap hit during that verification, not a code issue). As a
-   consequence, `trailsign-credential-sources`' `region`/`vault_ocid`/
-   `compartment_ocid` fields turned out not to be load-bearing for this
-   resolver (see the correction note under "The converged design" above)
-   — only `secret_ocid` and an authenticated client are actually used.
-7. **`credential_sources` needed the same namespacing `trailsign-resolve`
-   got** — renamed to `trailsign-credential-sources` (see "Fixing an
-   ambiguity"'s "Round three" above). It was the one remaining
-   structural top-level key still exposed as a bare, generic word; a
-   breaking config-shape change, released as v0.2.0.
-
-## Still open
-
-- **File format / library** — yaml assumed throughout (matches every
-  example so far); parsing itself needs nothing beyond a standard yaml
-  library for whatever language implements this (`PyYAML` in the Python
-  reference implementation; `gopkg.in/yaml.v3` in Go, `serde_yaml` in
-  Rust would be the equivalents) — no need for a heavier settings
-  framework, since the resolution logic itself is bespoke either way.
-- **Validation timing** — the reference implementation ships both:
-  `resolved()` is lazy (per-access), `validate(required_paths)` is the
-  opt-in eager path a consumer's entry point is meant to call up front.
-  Still needs confirming that's actually the right default, not just a
-  plausible draft.
-- **A port to a second language** — the Python package (`pyproject.toml`,
-  src layout, test suite) is built out; a port to at least one other
-  language is still open, given the whole point of this design is being
-  language-independent, not just Python.
-- **A non-instance-principal OCI auth shape** — instance-principal is the
-  only auth shape implemented (see "Resolved questions" above); a
-  consumer running `oracleKeyVault` outside an OCI compute instance
-  (local dev, CI) isn't supported yet. Same question will come up again
-  for every other vault-style resolver added later (AWS Secrets Manager,
-  Azure Key Vault, ...) — each will need its own real auth shape pinned
-  down against that vendor's actual production usage, not guessed.
-- **How a consuming project should sequence its own migration onto
-  this** — not a Trailsign design question exactly, but worth a note in
-  this library's own docs eventually: migrate one subsystem at a time,
-  behavior unchanged at each step, rather than one large cutover.

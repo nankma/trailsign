@@ -42,20 +42,18 @@ Install for development on this repo: `pip install -e ".[test]"`, then
 
 ## Start here
 
-- [`docs/design.md`](docs/design.md) — the core design: the config
-  shape, the resolve/dispatch contract (holds equally for a Go
-  `interface`, a Rust `trait`, or a Python `typing.Protocol`), why it's
-  shaped this way, two worked examples with diagrams, and what's still
-  undecided.
+- [`docs/architecture.md`](docs/architecture.md) — the config shape, the
+  resolve/dispatch contract (holds equally for a Go `interface`, a Rust
+  `trait`, or a Python `typing.Protocol`), the resolver reference table,
+  two worked examples with diagrams.
 - [`src/trailsign/settings.py`](src/trailsign/settings.py) — the Python
-  reference implementation, matching `docs/design.md` exactly.
+  reference implementation, matching `docs/architecture.md` exactly.
 - [`tests/`](tests/) — the test suite; `tests/conftest.py` has a shared
-  fixture config mirroring `docs/design.md`'s worked examples.
-- the `writing-system-design-docs` skill (global, not repo-local) — the
-  doc-writing convention `docs/design.md` follows, carried over
-  from where this project started in case future design docs here want
-  the same discipline (language-independent contracts, diagrams, a
-  "still open" section that's actually kept honest).
+  fixture config mirroring `docs/architecture.md`'s worked examples.
+
+Design rationale, decision history, and open questions are kept in a
+private companion repo, not published here — this repo carries what a
+consumer of the library needs, not the internal deliberation behind it.
 
 ## Origin
 
@@ -64,9 +62,7 @@ Argus) while building a settings abstraction so that bot could run
 standalone as well as on its current cloud deployment. The design turned
 out to be genuinely content-independent — nothing in it assumes anything
 bot-specific — so it's being extracted into its own project rather than
-staying bot-only. `docs/design.md`'s own "Origin" section has the
-originating project's actual settings inventory, kept for context on why
-the design has the shape it has.
+staying bot-only.
 
 ## The split that makes this portable
 
@@ -82,11 +78,9 @@ Two jobs, two owners, and only one of them is this library's job:
 
 Full reasoning for the split, plus two complete worked examples (a news
 source's API key from an environment variable, a telemetry backend's
-credential from a vault) with diagrams, is in `docs/design.md`.
+credential from a vault) with diagrams, is in `docs/architecture.md`.
 
 ## What's not decided yet
-
-See `docs/design.md`'s own "Still open" section for full detail:
 
 - A non-instance-principal auth shape for `oracleKeyVault` (today it only
   works from inside an OCI compute instance)

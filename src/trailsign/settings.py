@@ -6,9 +6,9 @@ assuming where to look -- a plain scalar, an environment variable, and a
 vault secret are all just different `trailsign-resolve:` nodes resolved
 the same way. `trailsign-resolve:` is a reserved, namespaced key --
 never a bare word like `resolve` -- so it can never collide with a
-consuming project's own field names. See docs/design.md for the full
-design (data flow, diagrams, and why `trailsign-resolve:` has to be a
-dedicated key rather than reusing a subsystem's own `type:`-style
+consuming project's own field names. See docs/architecture.md for the
+full design (data flow, diagrams, and why `trailsign-resolve:` has to be
+a dedicated key rather than reusing a subsystem's own `type:`-style
 discriminator).
 
 A reference implementation in Python, packaged and tested. Extracted
@@ -99,8 +99,9 @@ def _oci_secrets_client() -> Any:
     `compartment_ocid` aren't used here: get_secret_bundle(secret_ocid)
     needs neither under instance-principal auth (verified against a real
     vault secret via tools/verify_oracle_vault.py) -- see
-    docs/design.md's 'Still open' section for whether they end up
-    load-bearing for some other OCI operation later."""
+    docs/internal/design.md's 'Still open' section (private submodule)
+    for whether they end up load-bearing for some other OCI operation
+    later."""
     import oci  # local import -- see class docstring
 
     signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
@@ -146,7 +147,8 @@ class Settings:
         called by ordinary settings consumers. Reads from the reserved,
         namespaced `trailsign-credential-sources` top-level key, not a
         bare `credential_sources` -- same collision reasoning as
-        RESOLVE_KEY (see docs/design.md's 'Fixing an ambiguity' section):
+        RESOLVE_KEY (see docs/internal/design.md's 'Fixing an ambiguity'
+        section, private submodule, for the full collision history):
         a bare word is one a consumer's own top-level config might
         legitimately need for something unrelated."""
         try:

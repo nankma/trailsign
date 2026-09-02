@@ -1,0 +1,4 @@
+[submodule "docs/internal"]
+	path = docs/internal
+	url = https://github.com/nankma/trailsign-internal.git
+	branch = main
