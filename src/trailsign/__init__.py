@@ -2,6 +2,7 @@
 values. See docs/design.md at the repo root for the full design."""
 
 from .settings import (
+    CREDENTIAL_SOURCES_KEY,
     RESOLVE_KEY,
     EnvironmentVariableResolver,
     OracleKeyVaultResolver,
@@ -13,6 +14,7 @@ from .settings import (
 )
 
 __all__ = [
+    "CREDENTIAL_SOURCES_KEY",
     "RESOLVE_KEY",
     "EnvironmentVariableResolver",
     "OracleKeyVaultResolver",

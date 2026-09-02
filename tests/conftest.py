@@ -2,13 +2,13 @@ import pytest
 
 from trailsign import Settings
 
-# Mirrors docs/design.md's worked examples: a credential_sources block whose
-# own `type:` field equals a real resolver name (the exact collision shape
-# from the "Fixing an ambiguity" section), plus both walkthroughs
-# (news_source.gnews via environment-variable, telemetry.events via
-# oracleKeyVault).
+# Mirrors docs/design.md's worked examples: a trailsign-credential-sources
+# block whose own `type:` field equals a real resolver name (the exact
+# collision shape from the "Fixing an ambiguity" section), plus both
+# walkthroughs (news_source.gnews via environment-variable,
+# telemetry.events via oracleKeyVault).
 RAW_CONFIG = {
-    "credential_sources": {
+    "trailsign-credential-sources": {
         "oci-vault-main": {
             "type": "oracleKeyVault",
             "region": "us-ashburn-1",
