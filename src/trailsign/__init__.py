@@ -1,5 +1,5 @@
 """Trailsign: resolves a declarative, self-describing config into plain
-values. See docs/design.md at the repo root for the full design."""
+values. See docs/architecture.md at the repo root for the full design."""
 
 from .settings import (
     CREDENTIAL_SOURCES_KEY,

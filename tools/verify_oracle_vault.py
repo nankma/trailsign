@@ -34,7 +34,8 @@ def main() -> None:
     # trailsign-credential-sources' vault_ocid/compartment_ocid are
     # deliberately left out here: get_secret_bundle-by-OCID under
     # instance-principal auth needs neither, so this check also doubles
-    # as confirmation of that (see docs/design.md's "Still open" section).
+    # as confirmation of that (see docs/internal/design.md's "Still open"
+    # section, private submodule).
     raw = {
         "trailsign-credential-sources": {
             "dev-vault": {"type": "oracleKeyVault"},
