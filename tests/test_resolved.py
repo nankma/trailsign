@@ -47,12 +47,12 @@ def test_resolved_unregistered_resolver_raises(settings):
 
 def test_dispatch_key_does_not_collide_with_type_field(settings):
     """Regression test for docs/design.md's 'Fixing an ambiguity' section:
-    credential_sources.oci-vault-main.type == 'oracleKeyVault' (a plain
-    connection-definition field) must NOT be treated as a
+    trailsign-credential-sources.oci-vault-main.type == 'oracleKeyVault'
+    (a plain connection-definition field) must NOT be treated as a
     trailsign-resolve dispatch, even though its value equals a real
     resolver name -- only the presence of the `trailsign-resolve` key
     itself triggers dispatch, never a subsystem's own `type:` field."""
-    result = settings.resolved("credential_sources.oci-vault-main")
+    result = settings.resolved("trailsign-credential-sources.oci-vault-main")
     assert result == {
         "type": "oracleKeyVault",
         "region": "us-ashburn-1",

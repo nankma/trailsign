@@ -22,7 +22,7 @@ could run standalone as well as on its current cloud deployment. The
 table below — every raw environment-variable read that bot's code had,
 as of 2026-08-31, found by grep — isn't Trailsign's own scope; it's kept
 here because it's *why* the design has the shape it has (nested by
-subsystem, a `credential_sources:` block for vault-backed secrets, a
+subsystem, a `trailsign-credential-sources:` block for vault-backed secrets, a
 `plaintext`/`environment-variable`/`oracleKeyVault` resolver set as the
 starting three).
 
@@ -52,7 +52,7 @@ tokens, anything secret — are wrapped in a small typed-value object that
 declares where to actually get the value from:
 
 ```yaml
-credential_sources:
+trailsign-credential-sources:
   oci-vault-main:
     type: oracleKeyVault
     region: us-ashburn-1
@@ -89,18 +89,18 @@ news_source:
     queryadoptor: GNewsAdaptor
 ```
 
-Note `credential_sources.oci-vault-main.type: oracleKeyVault` above keeps
+Note `trailsign-credential-sources.oci-vault-main.type: oracleKeyVault` above keeps
 plain `type:` — that block is a connection definition, never passed
 through resolution (see "Fixing an ambiguity" below for why that
 distinction has to be structural, not coincidental).
 
-**`credential_sources:`** holds reusable, named *connection*-level
+**`trailsign-credential-sources:`** holds reusable, named *connection*-level
 definitions (region, vault/compartment id, auth shape) — written once,
 referenced by `source:` from any key that needs that vault. A key's own
 typed-value block only carries what's specific to that one secret
 (`secret_ocid`, a human-readable `name`), not the connection details
 again. Adding a second credential-source type (e.g. AWS Secrets Manager)
-is just another named block under `credential_sources:` plus a new
+is just another named block under `trailsign-credential-sources:` plus a new
 Resolver implementation, not a redesign.
 
 **Correction, verified 2026-09-01 against a live OCI Vault secret**:
@@ -108,7 +108,7 @@ under instance-principal auth (the only auth shape this design actually
 implements — see "Resolved questions" below), `region`/`vault_ocid`/
 `compartment_ocid` are *not* load-bearing for `OracleKeyVaultResolver` —
 `get_secret_bundle(secret_ocid)` needs only the secret's own OCID plus
-an authenticated client, nothing from `credential_sources` itself. The
+an authenticated client, nothing from `trailsign-credential-sources` itself. The
 `source:` reference is still real (it's validated to exist, and is
 where a future auth shape needing that connection info would read it
 from), but today those fields are effectively documentation for humans,
@@ -167,7 +167,7 @@ reference implementation of the resolve step.
 
 The **Resolver interface** has exactly one method: *given a typed-value
 node and a way to look up other settings (for cross-references like
-`credential_sources`), return the resolved value.* In Python this is a
+`trailsign-credential-sources`), return the resolved value.* In Python this is a
 `typing.Protocol`; in Go it'd be a one-method `interface`; in Rust a
 `trait` with one required method. Whatever the language, adding a new
 source (AWS Secrets Manager, Azure Key Vault, ...) means writing one new
@@ -183,7 +183,7 @@ that's a dedicated, namespaced key rather than a bare word like
 |---|---|
 | `plaintext` | Reading the node's own `value` field directly — no lookup at all |
 | `environment-variable` | Reading the node's `name` field, then reading that name from the process environment |
-| `oracleKeyVault` | Validating the node's `source` field names a real entry in the top-level `credential_sources` block, then fetching the node's own `secret_ocid` from OCI's Secrets service via instance-principal auth and base64-decoding the result to a plain string |
+| `oracleKeyVault` | Validating the node's `source` field names a real entry in the top-level `trailsign-credential-sources` block, then fetching the node's own `secret_ocid` from OCI's Secrets service via instance-principal auth and base64-decoding the result to a plain string |
 
 `oracleKeyVault`'s implementation should be the **only** place in this
 design that touches a cloud vendor's SDK, and that dependency should be
@@ -207,7 +207,7 @@ became its own project.** Round one: the original design reused a
 subsystem's own `type:` field as the resolver-dispatch signal too —
 `news_source.gnews.type: api` (a subsystem discriminator) collided with
 `api-key.type: environment-variable` (a resolve directive), and broke
-outright on `credential_sources.oci-vault-main.type: oracleKeyVault`
+outright on `trailsign-credential-sources.oci-vault-main.type: oracleKeyVault`
 (a connection definition whose `type` happens to equal a real resolver
 name — not a rare coincidence, since a credential source's own type and
 a resolver's name describe the same underlying service by construction).
@@ -227,6 +227,18 @@ A `trailsign-resolve` value naming an unregistered resolver raises
 `SettingsError` rather than silently passing the node through unresolved
 — once a node declares intent to be resolved, an unrecognized target
 should never resolve to itself unresolved.
+
+**Round three, 2026-09-01: the same reasoning applied to
+`trailsign-credential-sources` itself.** `RESOLVE_KEY` got the
+collision-proofing treatment early; the other structural top-level key
+`Settings.get_credential_source()` reads (originally the bare
+`credential_sources`) didn't, and sat unnoticed as the one remaining
+"unlikely but not impossible" collision — a consumer's own top-level
+config could legitimately have wanted `credential_sources` as its own
+subsystem name, same category of risk `trailsign-resolve` was created to
+close. Renamed to `trailsign-credential-sources` for the same reason,
+before any real consumer had migrated onto v0.1.0's schema — a breaking
+config-shape change, hence the v0.2.0 bump.
 
 ### Walkthrough 1 — a news source's API key (`news_source.gnews`)
 
@@ -278,7 +290,7 @@ telemetry:
 3. `api-key` **has** a `trailsign-resolve:` key (`oracleKeyVault`) →
    `OracleKeyVaultResolver.resolve(...)` runs. It validates that
    `settings.get_credential_source("oci-vault-main")` names a real entry
-   under top-level `credential_sources:`, then authenticates via
+   under top-level `trailsign-credential-sources:`, then authenticates via
    instance-principal auth and calls the OCI Secrets SDK with this
    node's own `secret_ocid` to fetch and base64-decode the real key —
    the connection block's own fields aren't used by this auth shape (see
@@ -386,7 +398,7 @@ data is out of scope entirely).
    rounds of collision (see "Fixing an ambiguity" above) before landing
    on `trailsign-resolve:`, which is unlikely enough as a real-world
    field name to treat as effectively collision-free.
-6. **`credential_sources`' OCI auth-config shape** — resolved 2026-09-01:
+6. **`trailsign-credential-sources`' OCI auth-config shape** — resolved 2026-09-01:
    instance-principal auth
    (`oci.auth.signers.InstancePrincipalsSecurityTokenSigner`), matching
    the same auth shape every other secret fetch in the originating bot's
@@ -397,10 +409,15 @@ data is out of scope entirely).
    `tools/verify_oracle_vault.py` (requires an IAM policy granting the
    calling instance's dynamic group `read secret-bundles` — a real,
    one-time gap hit during that verification, not a code issue). As a
-   consequence, `credential_sources`' `region`/`vault_ocid`/
+   consequence, `trailsign-credential-sources`' `region`/`vault_ocid`/
    `compartment_ocid` fields turned out not to be load-bearing for this
    resolver (see the correction note under "The converged design" above)
    — only `secret_ocid` and an authenticated client are actually used.
+7. **`credential_sources` needed the same namespacing `trailsign-resolve`
+   got** — renamed to `trailsign-credential-sources` (see "Fixing an
+   ambiguity"'s "Round three" above). It was the one remaining
+   structural top-level key still exposed as a bare, generic word; a
+   breaking config-shape change, released as v0.2.0.
 
 ## Still open
 

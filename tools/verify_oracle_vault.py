@@ -31,12 +31,12 @@ def main() -> None:
     parser.add_argument("--expected", help="if given, assert the resolved value equals this exactly")
     args = parser.parse_args()
 
-    # credential_sources' vault_ocid/compartment_ocid are deliberately left
-    # out here: get_secret_bundle-by-OCID under instance-principal auth
-    # needs neither, so this check also doubles as confirmation of that
-    # (see docs/design.md's "Still open" section).
+    # trailsign-credential-sources' vault_ocid/compartment_ocid are
+    # deliberately left out here: get_secret_bundle-by-OCID under
+    # instance-principal auth needs neither, so this check also doubles
+    # as confirmation of that (see docs/design.md's "Still open" section).
     raw = {
-        "credential_sources": {
+        "trailsign-credential-sources": {
             "dev-vault": {"type": "oracleKeyVault"},
         },
         "check": {

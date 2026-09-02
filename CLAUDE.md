@@ -31,6 +31,12 @@ for why it moved here instead of staying bot-specific.
   `type:` field, then a plain `resolve:` that was still a generic
   collision risk) before landing here — see `docs/design.md`'s "Fixing
   an ambiguity" section before touching the dispatch key.
+- **`trailsign-credential-sources` is the reserved top-level key for
+  named vault connections — never rename it back to bare
+  `credential_sources`.** Same collision reasoning as `trailsign-resolve`
+  (see "Fixing an ambiguity"'s "Round three"), applied one release late
+  (v0.1.0 shipped with the bare name; renamed for v0.2.0, before any real
+  consumer migrated onto the old schema).
 - **This library never constructs consumer objects, only resolves values
   to plain data.** Turning a resolved config block into a live object
   (an adaptor, a client, anything) is always the *consumer's* own
@@ -44,7 +50,7 @@ for why it moved here instead of staying bot-specific.
   `tools/verify_oracle_vault.py`); only works from inside an OCI compute
   instance (requires a dynamic-group IAM policy granting `read
   secret-bundles` — a real gap hit during that verification, not a code
-  bug). `credential_sources`' `region`/`vault_ocid`/`compartment_ocid`
+  bug). `trailsign-credential-sources`' `region`/`vault_ocid`/`compartment_ocid`
   fields are validated to exist via `source:` but are **not** actually
   consumed by this auth shape — don't assume they're load-bearing if
   refactoring this resolver; see `docs/design.md`'s correction note
@@ -61,8 +67,10 @@ for why it moved here instead of staying bot-specific.
   SSH key paths, live OCIDs). `local-infra/infrastructure.yaml` holds
   them and is gitignored; `tools/verify_oracle_vault.py` takes everything
   sensitive via CLI arg only and stays secret-free so it's safe to
-  commit. Before this repo ever goes from private to public, run the
-  global `audit-before-going-public` skill first.
+  commit. (The repo went public 2026-09-01, after running
+  `D:\SR\MyFirstAgent\.claude\skills\audit-before-going-public`'s scan
+  across full git history — clean. Re-run it before publishing anything
+  new that was written under "private repo, no one else will see this.")
 
 ## Where to look
 

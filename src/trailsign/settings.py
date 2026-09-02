@@ -27,6 +27,7 @@ from typing import Any, Protocol
 import yaml
 
 RESOLVE_KEY = "trailsign-resolve"
+CREDENTIAL_SOURCES_KEY = "trailsign-credential-sources"
 
 
 class SettingsError(Exception):
@@ -94,12 +95,12 @@ def _oci_secrets_client() -> Any:
     instance fails with an instance-metadata-service error, which is
     expected, not a bug in this function.
 
-    A `credential_sources` entry's own `vault_ocid`/`compartment_ocid`
-    aren't used here: get_secret_bundle(secret_ocid) needs neither under
-    instance-principal auth (verified against a real vault secret via
-    tools/verify_oracle_vault.py) -- see docs/design.md's 'Still open'
-    section for whether they end up load-bearing for some other
-    OCI operation later."""
+    A `trailsign-credential-sources` entry's own `vault_ocid`/
+    `compartment_ocid` aren't used here: get_secret_bundle(secret_ocid)
+    needs neither under instance-principal auth (verified against a real
+    vault secret via tools/verify_oracle_vault.py) -- see
+    docs/design.md's 'Still open' section for whether they end up
+    load-bearing for some other OCI operation later."""
     import oci  # local import -- see class docstring
 
     signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
@@ -142,11 +143,16 @@ class Settings:
     def get_credential_source(self, name: str) -> dict[str, Any]:
         """Looked up by resolvers that need a named, reusable connection
         block (see oracleKeyVault's `source:` field) -- not meant to be
-        called by ordinary settings consumers."""
+        called by ordinary settings consumers. Reads from the reserved,
+        namespaced `trailsign-credential-sources` top-level key, not a
+        bare `credential_sources` -- same collision reasoning as
+        RESOLVE_KEY (see docs/design.md's 'Fixing an ambiguity' section):
+        a bare word is one a consumer's own top-level config might
+        legitimately need for something unrelated."""
         try:
-            return self._raw["credential_sources"][name]
+            return self._raw[CREDENTIAL_SOURCES_KEY][name]
         except KeyError:
-            raise SettingsError(f"no credential_sources entry named {name!r}") from None
+            raise SettingsError(f"no {CREDENTIAL_SOURCES_KEY} entry named {name!r}") from None
 
     def validate(self, required_paths: list[str]) -> None:
         """Resolve every path up front and fail with ONE error listing
