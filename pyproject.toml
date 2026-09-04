@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trailsign"
-version = "0.2.0"
-description = "Resolves a declarative, self-describing config into plain values"
+version = "0.2.1"
+description = "A YAML settings library for resolving secrets and environment variables"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }

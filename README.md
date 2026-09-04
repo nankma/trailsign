@@ -1,5 +1,8 @@
 # Trailsign
 
+**A YAML settings library for resolving secrets and environment
+variables.**
+
 A small, language-independent library for resolving application
 settings from a declarative, self-describing config — where each value
 states its own source (a literal, an environment variable, a vault
