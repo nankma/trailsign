@@ -9,10 +9,50 @@ states its own source (a literal, an environment variable, a vault
 secret, ...) instead of the calling code assuming where to look.
 
 ```yaml
-api-key:
-  trailsign-resolve: environment-variable
-  name: GNEWS_API_KEY
+# One named vault connection, referenced by source: below. Instance-
+# principal auth (no static credential) -- see docs/architecture.md.
+trailsign-credential-sources:
+  oci-vault-main:
+    type: oracleKeyVault
+    region: us-ashburn-1
+    vault_ocid: ocid1.vault.oc1....
+    compartment_ocid: ocid1.compartment.oc1....
+
+models:
+  # A quick local/dev override -- the value is right there in the config.
+  dev:
+    url: https://api.deepseek.com
+    model: deepseek-v4-flash
+    api-key:
+      trailsign-resolve: plaintext
+      value: ABCDEF123456
+
+  # The model that matters for real traffic -- key comes from whatever
+  # set the environment variable (a Docker `-e`, a systemd unit, ...).
+  main:
+    url: https://api.deepseek.com
+    model: deepseek-v4-flash
+    api-key:
+      trailsign-resolve: environment-variable
+      name: DEEPSEEK_API_KEY
+
+  # High call-volume guardrail model, deliberately on a separate vault
+  # secret so it can't drain or rate-limit the main key above.
+  guardrail:
+    url: https://api.together.xyz/v1
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
+    api-key:
+      trailsign-resolve: oracleKeyVault
+      source: oci-vault-main
+      secret_ocid: ocid1.vaultsecret.oc1....
 ```
+
+Three different sources, one shape: every leaf that needs resolving
+just declares `trailsign-resolve:` and the fields that resolver needs —
+`models.dev.api-key`, `models.main.api-key`, and
+`models.guardrail.api-key` all come back as plain strings from
+`settings.resolved("models.guardrail")`, and nothing downstream needs to
+know which of the three ways it got there.
 
 `trailsign-resolve:` is a reserved, namespaced key — deliberately not a
 bare word like `resolve` — so it can never collide with a consuming
